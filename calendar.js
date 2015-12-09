@@ -1,7 +1,10 @@
 $(document).ready(function() {
-
   // Mozilla demo server (flushed every day)
   var server = "https://kinto.dev.mozaws.net/v1";
+
+  // Pusher app key
+  var pusher_key = "01a9feaaf9ebb120d1a6";
+
   // Simplest credentials ever.
   var authorization =  "Basic " + btoa("public:notsecret");
 
@@ -10,6 +13,12 @@ $(document).ready(function() {
 
   // Local store in IndexedDB.
   var store = kinto.collection("kinto_demo_calendar");
+
+  // Live changes.
+  var pusher = new Pusher(pusher_key, {
+    encrypted: true
+  });
+
 
   //
   // Initialize fullCalendar
@@ -162,4 +171,12 @@ $(document).ready(function() {
         throw err;
       });
   }
+
+  // This is the default bucket id for the ``public:notsecret`` user on kinto.dev
+  var channelName = '94b660c6-68f3-83c4-97fa-8e8ac4715204-kinto_demo_calendar-record';
+  var channel = pusher.subscribe(channelName);
+  channel.bind_all(function() {
+    syncServer();
+  });
+
 });
