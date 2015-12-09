@@ -61,7 +61,10 @@ $(document).ready(function() {
   // Update events when moved/resized
   //
   function eventDropOrResize(fcEvent) {
-    var newdates = {start: fcEvent.start.format(), end: fcEvent.end.format()};
+    var newdates = {
+      start: fcEvent.start.format(),
+      end: fcEvent.end ? fcEvent.end.format() : null
+    };
     store.get(fcEvent.id)
       .then(function (result) {
         var newrecord = Object.assign(result.data, newdates);
@@ -69,7 +72,7 @@ $(document).ready(function() {
       })
       .then(function (result) {
         // Update the event visually.
-        _calendar.fullCalendar('updateEvent', result.data);
+        _calendar.fullCalendar('updateEvent', Object.assign(fcEvent, result.data));
       })
       .then(syncServer);
   }
@@ -113,9 +116,7 @@ $(document).ready(function() {
       actions['Save'] = function () {
         var newtitle = $dialog.find('#title').val();
         var newrecord = Object.assign({}, event, {title: newtitle});
-
         var createOrUpdate = isNew ? store.create(newrecord) : store.update(newrecord);
-
         createOrUpdate
           .then(function (result) {
             $dialog.dialog('close');
@@ -138,7 +139,8 @@ $(document).ready(function() {
             _calendar.fullCalendar('renderEvent', record);
           });
           result.updated.forEach(function (record) {
-            _calendar.fullCalendar('updateEvent', record);
+            _calendar.fullCalendar('removeEvents', record.id);
+            _calendar.fullCalendar('renderEvent', record);
           });
           result.deleted.forEach(function (record) {
             _calendar.fullCalendar('removeEvents', record.id);
