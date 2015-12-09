@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="//npmcdn.com/kinto@1.1.0/dist/kinto-1.1.0.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.10.4/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.10.4/css/jquery-ui.min.css" />
+    <script src="//cdnjs.cloudflare.com/ajax/libs/moment.js/2.8.2/moment.min.js"></script>
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/fullcalendar/2.1.0/fullcalendar.css" />
+    <script src="//cdnjs.cloudflare.com/ajax/libs/fullcalendar/2.1.0/fullcalendar.js"></script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="calendar"></div>
+
+    <div id='eventDialog' class='dialog ui-helper-hidden'>
+        <form>
+            <div>
+                <label>Title:</label>
+                <input id='title' class="field" type="text"></input>
+            </div>
+        </form>
+    </div>
+    <script type="text/javascript" src="calendar.js"></script>
+  </body>
+</html>
+
