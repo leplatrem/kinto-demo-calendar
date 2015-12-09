@@ -1,15 +1,25 @@
 $(document).ready(function() {
-
   // Mozilla demo server (flushed every day)
   var server = "https://kinto.dev.mozaws.net/v1";
+  var bucket_id = "default";
+  var collection_id = "kinto_demo_calendar"
+
+  // Pusher app key
+  var pusher_key = "01a9feaaf9ebb120d1a6";
+
   // Simplest credentials ever.
   var authorization =  "Basic " + btoa("public:notsecret");
 
   // Kinto client with sync options.
-  var kinto = new Kinto({remote: server, headers: {Authorization: authorization}});
+  var kinto = new Kinto({remote: server, bucket: bucket_id,
+                         headers: {Authorization: authorization}});
 
   // Local store in IndexedDB.
-  var store = kinto.collection("kinto_demo_calendar");
+  var store = kinto.collection(collection_id);
+
+  // Setup live-sync!
+  getBucketId()
+   .then(setupLiveSync);
 
   //
   // Initialize fullCalendar
@@ -162,4 +172,33 @@ $(document).ready(function() {
         throw err;
       });
   }
+
+  // Live changes.
+  function getBucketId() {
+    // When using the `default` bucket, we should resolve its real id
+    // to be able to listen to notifications.
+    if (bucket_id != "default")
+      return Promise.resolve(bucket_id);
+
+    return fetch(server + '/', {headers: {Authorization: authorization}})
+      .then(function (result) {
+        return result.json();
+      })
+      .then(function (result) {
+        return result.user.bucket;
+      });
+  }
+
+  function setupLiveSync(bucket_id) {
+    var pusher = new Pusher(pusher_key, {
+      encrypted: true
+    });
+
+    var channelName = `${bucket_id}-${collection_id}-record`;
+    var channel = pusher.subscribe(channelName);
+    channel.bind_all(function() {
+      syncServer();
+    });
+  }
+
 });
