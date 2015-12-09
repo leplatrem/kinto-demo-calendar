@@ -1,4 +1,16 @@
 $(document).ready(function() {
+
+  // Mozilla demo server (flushed every day)
+  var server = "https://kinto.dev.mozaws.net/v1";
+  // Simplest credentials ever.
+  var authorization =  "Basic " + btoa("public:notsecret");
+
+  // Kinto client with sync options.
+  var kinto = new Kinto({remote: server, headers: {Authorization: authorization}});
+
+  // Local store in IndexedDB.
+  var store = kinto.collection("kinto_demo_calendar");
+
   //
   // Initialize fullCalendar
   //
@@ -26,8 +38,13 @@ $(document).ready(function() {
   // Load existing records from backend
   //
   function loadEvents(start, end, timezone, callback) {
-    // XXX: load
-    callback([]);
+    // Load previously created records.
+    store.list()
+      .then(function(results) {
+        // Add events to calendar.
+        callback(results.data);
+      })
+      .then(syncServer);
   }
 
   //
@@ -44,20 +61,24 @@ $(document).ready(function() {
   // Update events when moved/resized
   //
   function eventDropOrResize(fcEvent) {
-    var event = Object.assign({}, fcEvent);
-    event.start = fcEvent.start.format();
-    event.end = fcEvent.end.format();
-
-    // XXX: save event
-
-    _calendar.fullCalendar('updateEvent', fcEvent);
+    var newdates = {start: fcEvent.start.format(), end: fcEvent.end.format()};
+    store.get(fcEvent.id)
+      .then(function (result) {
+        var newrecord = Object.assign(result.data, newdates);
+        return store.update(newrecord);
+      })
+      .then(function (result) {
+        // Update the event visually.
+        _calendar.fullCalendar('updateEvent', result.data);
+      })
+      .then(syncServer);
   }
 
   //
   // jQuery UI dialog to create/delete/save
   //
   function eventDialog(event) {
-    var isNew = event.title === undefined;
+    var isNew = event.id === undefined;
 
     var $dialog = $('#eventDialog').dialog({
       modal: true,
@@ -78,26 +99,65 @@ $(document).ready(function() {
 
       if (!isNew) {
         actions['Delete'] = function () {
-          // XXX: delete event.id
-
-          _calendar.fullCalendar('removeEvents', event.id);
-          $dialog.dialog('close');
+          // Delete from store.
+          store.delete(event.id)
+            .then(function () {
+              // Update the event visually.
+              _calendar.fullCalendar('removeEvents', event.id);
+              $dialog.dialog('close');
+            })
+            .then(syncServer);
         };
       }
 
       actions['Save'] = function () {
-        event['title'] = $dialog.find('#title').val();
+        var newtitle = $dialog.find('#title').val();
+        var newrecord = Object.assign({}, event, {title: newtitle});
 
-        // XXX: save event
+        var createOrUpdate = isNew ? store.create(newrecord) : store.update(newrecord);
 
-        $dialog.dialog('close');
-
-        var action = isNew ? 'renderEvent' : 'updateEvent';
-        _calendar.fullCalendar(action, event);
-
+        createOrUpdate
+          .then(function (result) {
+            $dialog.dialog('close');
+            var action = isNew ? 'renderEvent' : 'updateEvent';
+            _calendar.fullCalendar(action, result.data);
+          })
+          .then(syncServer);
       };
 
       return actions;
     }
+  }
+
+  function syncServer() {
+    var options = {strategy: Kinto.syncStrategy.SERVER_WINS};
+    store.sync(options)
+      .then(function (result) {
+        if (result.ok) {
+          result.created.forEach(function (record) {
+            _calendar.fullCalendar('renderEvent', record);
+          });
+          result.updated.forEach(function (record) {
+            _calendar.fullCalendar('updateEvent', record);
+          });
+          result.deleted.forEach(function (record) {
+            _calendar.fullCalendar('removeEvents', record.id);
+          });
+        }
+      })
+      .catch(function (err) {
+        // Special treatment since the demo server is flushed.
+        if (/flushed/.test(err.message)) {
+          // Mark every local record as «new» and re-upload.
+          return store.resetSyncStatus()
+            .then(syncServer);
+        }
+        // Ignore network errors (offline)
+        if (/HTTP 0/.test(err.message)) {
+          console.log('Sync aborted (cannot reach server)');
+          return;
+        }
+        throw err;
+      });
   }
 });
