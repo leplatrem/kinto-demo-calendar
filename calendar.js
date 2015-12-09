@@ -7,12 +7,15 @@ $(document).ready(function() {
   // Pusher app key
   var pusher_key = "01a9feaaf9ebb120d1a6";
 
-  // Simplest credentials ever.
-  var authorization =  "Basic " + btoa("public:notsecret");
+  // Define the authentication
+  var headers = {};
+  var dbPrefix;
+  var token = authenticate(window.location.hash.slice(1));
+  window.location.hash = token;
 
   // Kinto client with sync options.
   var kinto = new Kinto({remote: server, bucket: bucket_id,
-                         headers: {Authorization: authorization}});
+                         headers: headers, dbPrefix: dbPrefix});
 
   // Local store in IndexedDB.
   var store = kinto.collection(collection_id);
@@ -173,14 +176,16 @@ $(document).ready(function() {
       });
   }
 
+  //
   // Live changes.
+  //
   function getBucketId() {
     // When using the `default` bucket, we should resolve its real id
     // to be able to listen to notifications.
     if (bucket_id != "default")
       return Promise.resolve(bucket_id);
 
-    return fetch(server + '/', {headers: {Authorization: authorization}})
+    return fetch(server + '/', {headers: headers})
       .then(function (result) {
         return result.json();
       })
@@ -197,8 +202,50 @@ $(document).ready(function() {
     var channelName = `${bucket_id}-${collection_id}-record`;
     var channel = pusher.subscribe(channelName);
     channel.bind_all(function() {
+      console.log(channelName, arguments);
       syncServer();
     });
+  }
+
+  //
+  // Firefox Account login
+  //
+  function loginURI(website) {
+    var login = server.replace("v1", "v1/fxa-oauth/login?redirect=");
+    var currentWebsite = website.replace(/#.*/, '');
+    var redirect = encodeURIComponent(currentWebsite + '#fxa:');
+    return login + redirect;
+  }
+
+  function authenticate(token) {
+    // Take last token from store or generate BasicAuth user with uuid4.
+    if (!token) {
+      token = localStorage.getItem("lastToken") || "public";
+    }
+    localStorage.setItem("lastToken", token);
+
+    if (token.indexOf('fxa:') === 0) {
+      // Fxa token passed in URL from redirection.
+      var bearerToken = token.replace('fxa:', '');
+      headers.Authorization = 'Bearer ' + bearerToken;
+      dbPrefix = bearerToken;
+      $('#login').html('<a href="#">Log out</a>');
+      $('#login').click(function() {
+        window.location.replace(window.location.href.replace(/#.*/, '#public'));
+        window.location.reload();
+        return false;
+      });
+      return '';
+    }
+    else {
+      // Token provided via hash, but no FxA.
+      // Use Basic Auth as before.
+      var userpass64 = btoa(token + ":notsecret");
+      headers.Authorization = 'Basic ' + userpass64;
+      dbPrefix = userpass64;
+      $('#login').html('<a href="' + loginURI(window.location.href) + '">Login with Firefox Account</a>');
+      return token;
+    }
   }
 
 });
