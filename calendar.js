@@ -238,7 +238,7 @@ $(document).ready(function() {
 
       $('#login').html('<a href="#">Log out</a>');
       $('#login').click(function() {
-        window.location.replace(window.location.href.replace(/#.*/, '#public'));
+        window.location.hash = '#public';
         window.location.reload();
         return false;
       });
