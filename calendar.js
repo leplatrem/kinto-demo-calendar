@@ -1,28 +1,37 @@
 $(document).ready(function() {
   // Mozilla demo server (flushed every day)
-  var server = "https://kinto.dev.mozaws.net/v1";
+  var storageServer = "https://kinto.dev.mozaws.net/v1";
+  var profileServer = "https://stable.dev.lcip.org/profile/v1";
   var bucket_id = "default";
-  var collection_id = "kinto_demo_calendar"
+  var collection_id = "kinto_demo_calendar";
 
-  // Pusher app key
+  // Pusher app key (as deployed on Mozila demo server)
   var pusher_key = "01a9feaaf9ebb120d1a6";
 
-  // Define the authentication
-  var headers = {};
-  var dbPrefix;
-  var token = authenticate(window.location.hash.slice(1));
-  window.location.hash = token;
-
-  // Kinto client with sync options.
-  var kinto = new Kinto({remote: server, bucket: bucket_id,
-                         headers: headers, dbPrefix: dbPrefix});
-
   // Local store in IndexedDB.
-  var store = kinto.collection(collection_id);
+  var store;
 
-  // Setup live-sync!
-  getBucketId()
-   .then(setupLiveSync);
+  var headers;
+
+  // Authentication from location hash
+  authenticate(window.location.hash.slice(1))
+    .then(function (authInfo) {
+      window.location.hash = authInfo.token;
+      headers = authInfo.headers;
+
+      // Kinto client with sync options.
+      var kinto = new Kinto({remote: storageServer,
+                             bucket: bucket_id,
+                             headers: headers,
+                             dbPrefix: authInfo.username});
+      store = kinto.collection(collection_id);
+    })
+    // Show calendar
+    .then(init)
+    // Setup live-sync!
+    .then(getBucketId)
+    .then(setupLiveSync);
+
 
   //
   // Initialize fullCalendar
@@ -44,8 +53,6 @@ $(document).ready(function() {
       eventResize: eventDropOrResize
     });
   }
-
-  init();
 
   //
   // Load existing records from backend
@@ -185,7 +192,7 @@ $(document).ready(function() {
     if (bucket_id != "default")
       return Promise.resolve(bucket_id);
 
-    return fetch(server + '/', {headers: headers})
+    return fetch(storageServer + '/', {headers: headers})
       .then(function (result) {
         return result.json();
       })
@@ -201,18 +208,15 @@ $(document).ready(function() {
 
     var channelName = `${bucket_id}-${collection_id}-record`;
     var channel = pusher.subscribe(channelName);
-    channel.bind_all(function() {
-      console.log(channelName, arguments);
-      syncServer();
-    });
+    channel.bind_all(syncServer);
   }
 
   //
   // Firefox Account login
   //
   function loginURI(website) {
-    var login = server.replace("v1", "v1/fxa-oauth/login?redirect=");
     var currentWebsite = website.replace(/#.*/, '');
+    var login = storageServer.replace("v1", "v1/fxa-oauth/login?redirect=");
     var redirect = encodeURIComponent(currentWebsite + '#fxa:');
     return login + redirect;
   }
@@ -224,28 +228,41 @@ $(document).ready(function() {
     }
     localStorage.setItem("lastToken", token);
 
+    var authInfo = {};
+
     if (token.indexOf('fxa:') === 0) {
       // Fxa token passed in URL from redirection.
       var bearerToken = token.replace('fxa:', '');
-      headers.Authorization = 'Bearer ' + bearerToken;
-      dbPrefix = bearerToken;
+      authInfo.token = '';
+      authInfo.headers = {Authorization: 'Bearer ' + bearerToken};
+
       $('#login').html('<a href="#">Log out</a>');
       $('#login').click(function() {
         window.location.replace(window.location.href.replace(/#.*/, '#public'));
         window.location.reload();
         return false;
       });
-      return '';
-    }
-    else {
-      // Token provided via hash, but no FxA.
-      // Use Basic Auth as before.
-      var userpass64 = btoa(token + ":notsecret");
-      headers.Authorization = 'Basic ' + userpass64;
-      dbPrefix = userpass64;
-      $('#login').html('<a href="' + loginURI(window.location.href) + '">Login with Firefox Account</a>');
-      return token;
-    }
-  }
 
+      // Fetch user info from FxA profile server
+      return fetch(profileServer + '/profile', {headers: authInfo.headers})
+        .then(function (response) {
+          return response.json();
+        })
+        .then(function (profile) {
+          authInfo.username = profile.uid;
+          return authInfo;
+        });
+    }
+
+    // Otherwise token provided via hash (no FxA).
+    // Use Basic Auth as before.
+    var userpass64 = btoa(token + ":notsecret");
+    authInfo.token = token;
+    authInfo.username = token;
+    authInfo.headers = {Authorization: 'Basic ' + userpass64};
+
+    var uri = loginURI(window.location.href);
+    $('#login').html(`<a href="${uri}">Login with Firefox Account</a>`);
+    return Promise.resolve(authInfo);
+  }
 });
