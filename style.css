@@ -5,6 +5,10 @@ body {
     font-size: 14px;
 }
 
+#login {
+    margin: 10px auto;
+}
+
 #calendar {
     max-width: 900px;
     margin: 0 auto;
