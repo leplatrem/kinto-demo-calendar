@@ -1,7 +1,6 @@
 $(document).ready(function() {
   // Mozilla demo server (flushed every day)
   var storageServer = "https://kinto.dev.mozaws.net/v1";
-  var profileServer = "https://stable.dev.lcip.org/profile/v1";
   var bucket_id = "default";
   var collection_id = "kinto_demo_calendar";
 
@@ -243,13 +242,13 @@ $(document).ready(function() {
         return false;
       });
 
-      // Fetch user info from FxA profile server
-      return fetch(profileServer + '/profile', {headers: authInfo.headers})
+      // Fetch user info.
+      return fetch(storageServer + '/', {headers: authInfo.headers})
         .then(function (response) {
           return response.json();
         })
-        .then(function (profile) {
-          authInfo.username = profile.uid;
+        .then(function (result) {
+          authInfo.username = result.user.id;
           return authInfo;
         });
     }
